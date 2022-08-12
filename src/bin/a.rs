@@ -235,7 +235,7 @@ fn compute_score(
     let mut uf = UnionFind::new(input.n * input.n);
     'connect_lp: for i in 0..input.n {
         for j in 0..input.n {
-            if grid[i][j].is_cable() || grid[i][j].is_empty() {
+            if !grid[i][j].is_computer() {
                 continue;
             }
             let now_computer = if let Cell::Computer { index } = grid[i][j] {
@@ -286,28 +286,12 @@ fn compute_score(
         }
     }
 
-    let mut pos = vec![];
-    for (r, g_row) in grid.iter().enumerate() {
-        for (c, &g) in g_row.iter().enumerate() {
-            if g.is_computer() {
-                pos.push((r, c));
-            }
-        }
-    }
-
-    for (i, &(ri, ci)) in pos.iter().enumerate() {
-        let computer1 = if let Cell::Computer { index } = grid[ri][ci] {
-            &computers[index]
-        } else {
-            unreachable!()
-        };
-        for &(rj, cj) in pos.iter().skip(i + 1) {
-            let computer2 = if let Cell::Computer { index } = grid[rj][cj] {
-                &computers[index]
-            } else {
-                unreachable!()
-            };
-            if uf.same(ri * input.n + ci, rj * input.n + cj) {
+    for (i, &computer1) in computers.iter().enumerate() {
+        for &computer2 in computers.iter().skip(i + 1) {
+            if uf.same(
+                computer1.posi.0 * input.n + computer1.posi.1,
+                computer2.posi.0 * input.n + computer2.posi.1,
+            ) {
                 if computer1.kind == computer2.kind {
                     score += 1;
                 } else {
