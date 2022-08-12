@@ -1,14 +1,14 @@
 use rand::prelude::*;
 
-const TIMELIMIT: f64 = 2.7;
+const TIMELIMIT: f64 = 2.75;
 const DIJ: [(usize, usize); 4] = [(0, !0), (!0, 0), (0, 1), (1, 0)];
 // const DIR: [char; 4] = ['L', 'U', 'R', 'D'];
+type Output = Vec<(usize, usize, usize, usize)>;
 
 fn main() {
     let timer = Timer::new();
     let input = Input::new();
     let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(0);
-    // greedy(&input);
     let (mut grid, mut computers) = {
         let mut g = vec![vec![Cell::Empty; input.n]; input.n];
         let mut cs = vec![];
@@ -41,104 +41,23 @@ fn main() {
     }
 }
 
-fn greedy(input: &Input) -> i64 {
-    let grid = input.grid.clone();
-    let output_move: Vec<(usize, usize, usize, usize)> = vec![];
-
-    let mut output_connect = vec![];
-    let mut uf = UnionFind::new(input.n * input.n);
-    let mut cabled_grid = grid.clone();
-    for i in 0..input.n {
-        for j in 0..input.n {
-            if cabled_grid[i][j] == 0 || cabled_grid[i][j] == !0 {
-                continue;
-            }
-            for &(di, dj) in DIJ.iter() {
-                let mut ni = i;
-                let mut nj = j;
-                for len in 1..input.n {
-                    ni += di;
-                    nj += dj;
-                    if input.n <= ni || input.n <= nj {
-                        break;
-                    }
-                    if cabled_grid[ni][nj] == !0 {
-                        break;
-                    }
-                    if cabled_grid[ni][nj] == 0 {
-                        continue;
-                    }
-                    if uf.same(i * input.n + j, ni * input.n + nj) {
-                        break;
-                    }
-                    if cabled_grid[ni][nj] == cabled_grid[i][j] {
-                        output_connect.push((i, j, ni, nj));
-                        uf.unite(i * input.n + j, ni * input.n + nj);
-                        for _ in 0..len - 1 {
-                            ni -= di;
-                            nj -= dj;
-                            cabled_grid[ni][nj] = !0; // cableを引いたマス
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    let mut now_score = 0;
-    let mut pos = vec![];
-    for (r, g_row) in grid.iter().enumerate() {
-        for (c, &g) in g_row.iter().enumerate() {
-            if g != !0 && g != 0 {
-                pos.push((r, c));
-            }
-        }
-    }
-
-    for (i, &(ri, ci)) in pos.iter().enumerate() {
-        for &(rj, cj) in pos.iter().skip(i + 1) {
-            if uf.same(ri * input.n + ci, rj * input.n + cj) {
-                if grid[ri][ci] == grid[rj][cj] {
-                    now_score += 1;
-                } else {
-                    now_score -= 1;
-                }
-            }
-        }
-    }
-    println!("{}", output_move.len());
-    for (a, b, c, d) in output_move.iter() {
-        println!("{} {} {} {}", a, b, c, d);
-    }
-    println!("{}", output_connect.len());
-    for (e, f, g, h) in output_connect.iter() {
-        println!("{} {} {} {}", e, f, g, h);
-    }
-    eprintln!("{}", now_score);
-    now_score
-}
-
 fn local_search(
     input: &Input,
     timer: &Timer,
     rng: &mut rand_chacha::ChaCha20Rng,
-    start_grid: &mut Vec<Vec<Cell>>,
-    start_computers: &mut Vec<Computer>,
-) -> (
-    Vec<(usize, usize, usize, usize)>,
-    Vec<(usize, usize, usize, usize)>,
-) {
+    start_grid: &mut [Vec<Cell>],
+    start_computers: &mut [Computer],
+) -> (Output, Output) {
     const T0: f64 = 50.0;
-    const T1: f64 = 0.0001;
+    const T1: f64 = 0.01;
     let mut temp = T0;
     let mut prob;
 
     let mut move_computers = vec![];
     let mut connect_computers = vec![];
     let (mut score, mut best_connect) = {
-        let mut grid = start_grid.clone();
-        let mut computers = start_computers.clone();
+        let mut grid = start_grid.to_owned();
+        let mut computers = start_computers.to_owned();
         for _ in 0..input.k * 15 {
             let mut moveable = vec![];
             for (i, computer) in computers.iter().enumerate() {
@@ -178,7 +97,7 @@ fn local_search(
     // どの向きに動かすかは探索する（今はランダム）
     let mut count = 0;
     'lp: loop {
-        if count >= 10 {
+        if count >= 100 {
             let passed = timer.get_time() / TIMELIMIT;
             if passed >= 1.0 {
                 break;
@@ -188,8 +107,8 @@ fn local_search(
         }
         count += 1;
         let mut new_move_computers = move_computers.clone();
-        let mut new_grid = start_grid.clone();
-        let mut new_computers = start_computers.clone();
+        let mut new_grid = start_grid.to_owned();
+        let mut new_computers = start_computers.to_owned();
         // 近傍解作成
         let neigh_count = 2;
         let neigh = rng.gen_range(0, neigh_count);
@@ -203,8 +122,8 @@ fn local_search(
                     while 40 * input.k < new_move_computers.len() {
                         new_move_computers.pop();
                     }
-                    new_grid = start_grid.clone();
-                    new_computers = start_computers.clone();
+                    new_grid = start_grid.to_owned();
+                    new_computers = start_computers.to_owned();
                     let insert_i = if new_move_computers.is_empty() {
                         0
                     } else {
