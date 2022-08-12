@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use rand::prelude::*;
 
 const TIMELIMIT: f64 = 2.75;
@@ -172,19 +170,15 @@ fn annealing(
             }
             1 => {
                 // remove
-                let mut removes = HashSet::new();
                 for _ in 0..rng.gen_range(1, 10) {
                     if new_moves.is_empty() {
                         break;
                     }
                     let i = rng.gen_range(0, new_moves.len());
-                    removes.insert(i);
+                    new_moves.remove(i);
                 }
                 let mut new = vec![];
-                for (i, &(com_i, next)) in new_moves.iter().enumerate() {
-                    if removes.contains(&i) {
-                        continue;
-                    }
+                for &(com_i, next) in new_moves.iter() {
                     if new_computers[com_i].go(input, next, &mut new_grid) {
                         new.push((com_i, next));
                     }
