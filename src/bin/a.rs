@@ -394,15 +394,15 @@ enum Cell {
 }
 
 impl Cell {
-    const fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         matches!(*self, Cell::Empty)
     }
 
-    const fn is_computer(&self) -> bool {
+    fn is_computer(&self) -> bool {
         matches!(*self, Cell::Computer { index: _ })
     }
 
-    const fn is_cable(&self) -> bool {
+    fn is_cable(&self) -> bool {
         matches!(*self, Cell::Cable { kind: _ })
     }
 }
