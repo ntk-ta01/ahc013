@@ -196,11 +196,11 @@ fn local_search(
         match neigh {
             0 => {
                 // insert
-                if 20 * input.k <= new_move_computers.len() {
+                if 40 * input.k <= new_move_computers.len() {
                     continue 'lp;
                 }
                 for _ in 0..rng.gen_range(1, 5) {
-                    while 20 * input.k < new_move_computers.len() {
+                    while 40 * input.k < new_move_computers.len() {
                         new_move_computers.pop();
                     }
                     new_grid = start_grid.clone();
@@ -215,7 +215,6 @@ fn local_search(
                             unreachable!()
                         }
                     }
-                    // compute_score(input, &mut new_grid, &mut new_computers);
                     let mut moveable = vec![];
                     for (i, computer) in new_computers.iter().enumerate() {
                         for &(di, dj) in DIJ.iter() {
@@ -249,7 +248,7 @@ fn local_search(
             }
             1 => {
                 // remove
-                for _ in 0..rng.gen_range(1, 7) {
+                for _ in 0..rng.gen_range(1, 10) {
                     if new_move_computers.is_empty() {
                         continue;
                     }
