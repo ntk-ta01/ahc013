@@ -169,7 +169,7 @@ fn annealing(
             }
             1 => {
                 // remove
-                for _ in 0..rng.gen_range(1, 10) {
+                for _ in 0..rng.gen_range(1, input.k * 2) {
                     if new_moves.is_empty() {
                         break;
                     }
