@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rand::prelude::*;
 
 const TIMELIMIT: f64 = 2.75;
@@ -146,12 +148,10 @@ fn annealing(
                             }
                             match new_grid[ni][nj] {
                                 Cell::Empty => moveable.push((i, (ni, nj))),
-                                Cell::Cable { kind } => {
-                                    if kind == computer.kind {
-                                        moveable.push((i, (ni, nj)));
-                                    }
-                                }
                                 Cell::Computer { index: _ } => {}
+                                Cell::Cable { kind: _ } => {
+                                    unreachable!();
+                                }
                             }
                         }
                     }
@@ -172,18 +172,24 @@ fn annealing(
             }
             1 => {
                 // remove
+                let mut removes = HashSet::new();
                 for _ in 0..rng.gen_range(1, 10) {
                     if new_moves.is_empty() {
-                        continue;
+                        break;
                     }
                     let i = rng.gen_range(0, new_moves.len());
-                    new_moves.remove(i);
+                    removes.insert(i);
                 }
-                for &(com_i, next) in new_moves.iter() {
-                    if !new_computers[com_i].go(input, next, &mut new_grid) {
-                        continue 'lp;
+                let mut new = vec![];
+                for (i, &(com_i, next)) in new_moves.iter().enumerate() {
+                    if removes.contains(&i) {
+                        continue;
+                    }
+                    if new_computers[com_i].go(input, next, &mut new_grid) {
+                        new.push((com_i, next));
                     }
                 }
+                new_moves = new;
             }
             _ => unreachable!(),
         }
