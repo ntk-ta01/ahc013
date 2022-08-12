@@ -1,6 +1,6 @@
 use rand::prelude::*;
 
-const TIMELIMIT: f64 = 2.75;
+const TIMELIMIT: f64 = 2.725;
 const DIJ: [(usize, usize); 4] = [(0, !0), (!0, 0), (0, 1), (1, 0)];
 // const DIR: [char; 4] = ['L', 'U', 'R', 'D'];
 type Output = Vec<(usize, usize, usize, usize)>;
@@ -117,12 +117,9 @@ fn annealing(
         match neigh {
             0 => {
                 // insert
-                if 40 * input.k <= new_moves.len() {
-                    continue 'lp;
-                }
                 for _ in 0..rng.gen_range(1, 5) {
-                    if 40 * input.k < new_moves.len() {
-                        break;
+                    if 100 * input.k <= new_moves.len() {
+                        continue 'lp;
                     }
                     let mut new = vec![];
                     new_grid = start_grid.to_owned();
@@ -351,7 +348,7 @@ struct Computer {
 
 impl Computer {
     fn go(&mut self, input: &Input, next: (usize, usize), grid: &mut [Vec<Cell>]) -> bool {
-        if grid[next.0][next.1] != Cell::Empty {
+        if !grid[next.0][next.1].is_empty() {
             return false;
         }
         if DIJ.iter().all(|&(di, dj)| {
