@@ -53,9 +53,9 @@ fn local_search(
     let mut temp = T0;
     let mut prob;
 
-    let mut move_computers = vec![];
-    let mut connect_computers = vec![];
-    let (mut score, mut best_connect) = {
+    let mut moves = vec![];
+    let mut connects = vec![];
+    let (mut score, mut best_connects) = {
         let mut grid = start_grid.to_owned();
         let mut computers = start_computers.to_owned();
         for _ in 0..input.k * 15 {
@@ -85,15 +85,15 @@ fn local_search(
             if !computers[com_i].go(input, next, &mut grid) {
                 unreachable!();
             }
-            move_computers.push((com_i, next));
+            moves.push((com_i, next));
         }
 
-        compute_score(input, &mut grid, &mut computers, move_computers.len())
+        compute_score(input, &mut grid, &mut computers, moves.len())
     };
 
     let mut best_score = score;
-    let mut best_move = move_computers.clone();
-    // move_computersの順にcomputerを動かす
+    let mut best_moves = moves.clone();
+    // movesの順にcomputerを動かす
     // どの向きに動かすかは探索する（今はランダム）
     let mut count = 0;
     'lp: loop {
@@ -106,7 +106,7 @@ fn local_search(
             count = 0;
         }
         count += 1;
-        let mut new_move_computers = move_computers.clone();
+        let mut new_moves = moves.clone();
         let mut new_grid = start_grid.to_owned();
         let mut new_computers = start_computers.to_owned();
         // 近傍解作成
@@ -115,21 +115,21 @@ fn local_search(
         match neigh {
             0 => {
                 // insert
-                if 40 * input.k <= new_move_computers.len() {
+                if 40 * input.k <= new_moves.len() {
                     continue 'lp;
                 }
                 for _ in 0..rng.gen_range(1, 5) {
-                    while 40 * input.k < new_move_computers.len() {
-                        new_move_computers.pop();
+                    while 40 * input.k < new_moves.len() {
+                        new_moves.pop();
                     }
                     new_grid = start_grid.to_owned();
                     new_computers = start_computers.to_owned();
-                    let insert_i = if new_move_computers.is_empty() {
+                    let insert_i = if new_moves.is_empty() {
                         0
                     } else {
-                        rng.gen_range(0, new_move_computers.len())
+                        rng.gen_range(0, new_moves.len())
                     };
-                    for &(com_i, next) in new_move_computers.iter().take(insert_i) {
+                    for &(com_i, next) in new_moves.iter().take(insert_i) {
                         if !new_computers[com_i].go(input, next, &mut new_grid) {
                             unreachable!()
                         }
@@ -157,8 +157,8 @@ fn local_search(
                         continue;
                     }
                     let (com_i, next) = moveable[rng.gen_range(0, moveable.len())];
-                    new_move_computers.insert(insert_i, (com_i, next));
-                    for &(com_i, next) in new_move_computers.iter().skip(insert_i) {
+                    new_moves.insert(insert_i, (com_i, next));
+                    for &(com_i, next) in new_moves.iter().skip(insert_i) {
                         if !new_computers[com_i].go(input, next, &mut new_grid) {
                             continue 'lp;
                         }
@@ -168,13 +168,13 @@ fn local_search(
             1 => {
                 // remove
                 for _ in 0..rng.gen_range(1, 10) {
-                    if new_move_computers.is_empty() {
+                    if new_moves.is_empty() {
                         continue;
                     }
-                    let i = rng.gen_range(0, new_move_computers.len());
-                    new_move_computers.remove(i);
+                    let i = rng.gen_range(0, new_moves.len());
+                    new_moves.remove(i);
                 }
-                for &(com_i, next) in new_move_computers.iter() {
+                for &(com_i, next) in new_moves.iter() {
                     if !new_computers[com_i].go(input, next, &mut new_grid) {
                         continue 'lp;
                     }
@@ -184,38 +184,34 @@ fn local_search(
         }
 
         // 近傍解作成ここまで
-        let (new_score, new_connect) = compute_score(
-            input,
-            &mut new_grid,
-            &mut new_computers,
-            new_move_computers.len(),
-        );
+        let (new_score, new_connect) =
+            compute_score(input, &mut new_grid, &mut new_computers, new_moves.len());
         prob = f64::exp((new_score - score) as f64 / temp);
         if score < new_score || rng.gen_bool(prob) {
             score = new_score;
-            move_computers = new_move_computers;
-            connect_computers = new_connect;
+            moves = new_moves;
+            connects = new_connect;
         }
 
         if best_score < score {
             best_score = score;
-            best_move = move_computers.clone();
-            best_connect = connect_computers.clone();
+            best_moves = moves.clone();
+            best_connects = connects.clone();
         }
     }
     eprintln!("best_score: {}", best_score);
-    let move_computers = {
+    let moves = {
         let mut mv = vec![];
         let grid = start_grid;
         let computers = start_computers;
-        for (com_i, next) in best_move {
+        for (com_i, next) in best_moves {
             let pos = computers[com_i].posi;
             mv.push((pos.0, pos.1, next.0, next.1));
             computers[com_i].go(input, next, grid);
         }
         mv
     };
-    (move_computers, best_connect)
+    (moves, best_connects)
 }
 
 fn compute_score(
