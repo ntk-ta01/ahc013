@@ -1,6 +1,6 @@
 use rand::prelude::*;
 
-const TIMELIMIT: f64 = 2.0;
+const TIMELIMIT: f64 = 2.7;
 const DIJ: [(usize, usize); 4] = [(0, !0), (!0, 0), (0, 1), (1, 0)];
 // const DIR: [char; 4] = ['L', 'U', 'R', 'D'];
 
@@ -129,8 +129,8 @@ fn local_search(
     Vec<(usize, usize, usize, usize)>,
     Vec<(usize, usize, usize, usize)>,
 ) {
-    const T0: f64 = 100.0;
-    const T1: f64 = 0.01;
+    const T0: f64 = 50.0;
+    const T1: f64 = 0.0001;
     let mut temp = T0;
     let mut prob;
 
@@ -249,7 +249,7 @@ fn local_search(
             }
             1 => {
                 // remove
-                for _ in 0..rng.gen_range(1, 5) {
+                for _ in 0..rng.gen_range(1, 7) {
                     if new_move_computers.is_empty() {
                         continue;
                     }
