@@ -8,14 +8,14 @@ fn main() {
     let timer = Timer::new();
     let input = Input::new();
     let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(0);
-    // let score = greedy(&input);
+    greedy(&input);
     let (mut grid, mut computers) = {
         let mut g = vec![vec![Cell::Empty; input.n]; input.n];
         let mut cs = vec![];
         for (i, (in_row, row)) in input.grid.iter().zip(g.iter_mut()).enumerate() {
             for (j, (&in_element, element)) in in_row.iter().zip(row.iter_mut()).enumerate() {
                 if in_element != 0 {
-                    *element = Cell::Computer { index: in_element };
+                    *element = Cell::Computer { index: cs.len() };
                     cs.push(Computer {
                         posi: (i, j),
                         kind: in_element,
@@ -25,23 +25,19 @@ fn main() {
         }
         (g, cs)
     };
-    if input.k % 2 == 0 {
-        let (output_move, mut output_connect) =
-            local_search(&input, &timer, &mut rng, &mut grid, &mut computers);
+    let (output_move, mut output_connect) =
+        local_search(&input, &timer, &mut rng, &mut grid, &mut computers);
 
-        println!("{}", output_move.len());
-        for (a, b, c, d) in output_move.iter() {
-            println!("{} {} {} {}", a, b, c, d);
-        }
-        while 100 * input.k < output_move.len() + output_connect.len() {
-            output_connect.pop();
-        }
-        println!("{}", output_connect.len());
-        for (e, f, g, h) in output_connect.iter() {
-            println!("{} {} {} {}", e, f, g, h);
-        }
-    } else {
-        greedy(&input);
+    println!("{}", output_move.len());
+    for (a, b, c, d) in output_move.iter() {
+        println!("{} {} {} {}", a, b, c, d);
+    }
+    while 100 * input.k < output_move.len() + output_connect.len() {
+        output_connect.pop();
+    }
+    println!("{}", output_connect.len());
+    for (e, f, g, h) in output_connect.iter() {
+        println!("{} {} {} {}", e, f, g, h);
     }
 }
 
@@ -287,12 +283,12 @@ fn local_search(
     eprintln!("best_score: {}", best_score);
     let move_computers = {
         let mut mv = vec![];
-        let mut grid = start_grid;
-        let mut computers = start_computers;
+        let grid = start_grid;
+        let computers = start_computers;
         for (com_i, next) in best_move {
             let pos = computers[com_i].posi;
             mv.push((pos.0, pos.1, next.0, next.1));
-            computers[com_i].go(input, next, &mut grid);
+            computers[com_i].go(input, next, grid);
         }
         mv
     };
@@ -309,10 +305,7 @@ fn compute_score(
     let mut uf = UnionFind::new(input.n * input.n);
     for i in 0..input.n {
         for j in 0..input.n {
-            if let Cell::Cable { kind: _ } = grid[i][j] {
-                continue;
-            }
-            if let Cell::Empty = grid[i][j] {
+            if grid[i][j].is_cable() || grid[i][j].is_empty() {
                 continue;
             }
             let now_computer = if let Cell::Computer { index } = grid[i][j] {
@@ -363,7 +356,7 @@ fn compute_score(
     let mut pos = vec![];
     for (r, g_row) in grid.iter().enumerate() {
         for (c, &g) in g_row.iter().enumerate() {
-            if let Cell::Computer { index: _ } = g {
+            if g.is_computer() {
                 pos.push((r, c));
             }
         }
@@ -398,6 +391,20 @@ enum Cell {
     Empty,
     Computer { index: usize },
     Cable { kind: usize },
+}
+
+impl Cell {
+    const fn is_empty(&self) -> bool {
+        matches!(*self, Cell::Empty)
+    }
+
+    const fn is_computer(&self) -> bool {
+        matches!(*self, Cell::Computer { index: _ })
+    }
+
+    const fn is_cable(&self) -> bool {
+        matches!(*self, Cell::Cable { kind: _ })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -511,5 +518,46 @@ impl Timer {
 
     fn get_time(&self) -> f64 {
         get_time() - self.start_time
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn compute_score_works() {
+        let input = Input {
+            n: 5,
+            k: 3,
+            grid: vec![
+                vec![0, 2, 0, 2, 0],
+                vec![2, 1, 0, 2, 3],
+                vec![3, 0, 3, 0, 2],
+                vec![0, 1, 0, 3, 3],
+                vec![3, 2, 0, 3, 2],
+            ],
+        };
+        let (mut grid, mut computers) = {
+            let mut g = vec![vec![Cell::Empty; input.n]; input.n];
+            let mut cs = vec![];
+            for (i, (in_row, row)) in input.grid.iter().zip(g.iter_mut()).enumerate() {
+                for (j, (&in_element, element)) in in_row.iter().zip(row.iter_mut()).enumerate() {
+                    if in_element != 0 {
+                        *element = Cell::Computer { index: cs.len() };
+                        cs.push(Computer {
+                            posi: (i, j),
+                            kind: in_element,
+                        });
+                    }
+                }
+            }
+            (g, cs)
+        };
+        let (score, output_connect) = compute_score(&input, &mut grid, &mut computers);
+        println!("{}", output_connect.len());
+        for (e, f, g, h) in output_connect.iter() {
+            println!("{} {} {} {}", e, f, g, h);
+        }
+        println!("score: {}", score);
     }
 }
