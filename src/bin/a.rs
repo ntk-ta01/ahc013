@@ -8,7 +8,7 @@ fn main() {
     let timer = Timer::new();
     let input = Input::new();
     let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(0);
-    greedy(&input);
+    // greedy(&input);
     let (mut grid, mut computers) = {
         let mut g = vec![vec![Cell::Empty; input.n]; input.n];
         let mut cs = vec![];
@@ -169,7 +169,7 @@ fn local_search(
             move_computers.push((com_i, next));
         }
 
-        compute_score(input, &mut grid, &mut computers)
+        compute_score(input, &mut grid, &mut computers, move_computers.len())
     };
 
     let mut best_score = score;
@@ -266,7 +266,12 @@ fn local_search(
         }
 
         // 近傍解作成ここまで
-        let (new_score, new_connect) = compute_score(input, &mut new_grid, &mut new_computers);
+        let (new_score, new_connect) = compute_score(
+            input,
+            &mut new_grid,
+            &mut new_computers,
+            new_move_computers.len(),
+        );
         prob = f64::exp((new_score - score) as f64 / temp);
         if score < new_score || rng.gen_bool(prob) {
             score = new_score;
@@ -299,11 +304,12 @@ fn compute_score(
     input: &Input,
     grid: &mut [Vec<Cell>],
     computers: &mut [Computer],
+    move_time: usize,
 ) -> (i64, Vec<(usize, usize, usize, usize)>) {
     let mut score = 0;
     let mut output_connect = vec![];
     let mut uf = UnionFind::new(input.n * input.n);
-    for i in 0..input.n {
+    'connect_lp: for i in 0..input.n {
         for j in 0..input.n {
             if grid[i][j].is_cable() || grid[i][j].is_empty() {
                 continue;
@@ -346,6 +352,9 @@ fn compute_score(
                                 kind: now_computer.kind,
                             };
                         }
+                    }
+                    if 100 * input.k == move_time + output_connect.len() {
+                        break 'connect_lp;
                     }
                     break;
                 }
@@ -553,7 +562,7 @@ mod tests {
             }
             (g, cs)
         };
-        let (score, output_connect) = compute_score(&input, &mut grid, &mut computers);
+        let (score, output_connect) = compute_score(&input, &mut grid, &mut computers, 0);
         println!("{}", output_connect.len());
         for (e, f, g, h) in output_connect.iter() {
             println!("{} {} {} {}", e, f, g, h);
