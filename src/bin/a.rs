@@ -96,6 +96,8 @@ fn annealing(
     // movesの順にcomputerを動かす
     // どの向きに動かすかは探索する（今はランダム）
     let mut count = 0;
+    // let mut neigh0 = 0;
+    // let mut neigh1 = 0;
     'lp: loop {
         if count >= 100 {
             let passed = timer.get_time() / TIMELIMIT;
@@ -177,13 +179,11 @@ fn annealing(
                     let i = rng.gen_range(0, new_moves.len());
                     new_moves.remove(i);
                 }
-                let mut new = vec![];
                 for &(com_i, next) in new_moves.iter() {
-                    if new_computers[com_i].go(input, next, &mut new_grid) {
-                        new.push((com_i, next));
+                    if !new_computers[com_i].go(input, next, &mut new_grid) {
+                        continue 'lp;
                     }
                 }
-                new_moves = new;
             }
             _ => unreachable!(),
         }
@@ -199,11 +199,18 @@ fn annealing(
         }
 
         if best_score < score {
+            // if neigh == 0 {
+            //     neigh0 += 1;
+            // }
+            // if neigh == 1 {
+            //     neigh1 += 1;
+            // }
             best_score = score;
             best_moves = moves.clone();
             best_connects = connects.clone();
         }
     }
+    // eprintln!("insert: {} remove: {}", neigh0, neigh1);
     // eprintln!("count: {}", count);
     eprintln!("best_score: {}", best_score);
     let moves = {
