@@ -26,7 +26,7 @@ fn main() {
         (g, cs)
     };
     let (output_move, mut output_connect) =
-        local_search(&input, &timer, &mut rng, &mut grid, &mut computers);
+        annealing(&input, &timer, &mut rng, &mut grid, &mut computers);
 
     println!("{}", output_move.len());
     for (a, b, c, d) in output_move.iter() {
@@ -41,7 +41,7 @@ fn main() {
     }
 }
 
-fn local_search(
+fn annealing(
     input: &Input,
     timer: &Timer,
     rng: &mut rand_chacha::ChaCha20Rng,
@@ -119,9 +119,10 @@ fn local_search(
                     continue 'lp;
                 }
                 for _ in 0..rng.gen_range(1, 5) {
-                    while 40 * input.k < new_moves.len() {
-                        new_moves.pop();
+                    if 40 * input.k < new_moves.len() {
+                        break;
                     }
+                    let mut new = vec![];
                     new_grid = start_grid.to_owned();
                     new_computers = start_computers.to_owned();
                     let insert_i = if new_moves.is_empty() {
@@ -133,6 +134,7 @@ fn local_search(
                         if !new_computers[com_i].go(input, next, &mut new_grid) {
                             unreachable!()
                         }
+                        new.push((com_i, next));
                     }
                     let mut moveable = vec![];
                     for (i, computer) in new_computers.iter().enumerate() {
@@ -157,12 +159,15 @@ fn local_search(
                         continue;
                     }
                     let (com_i, next) = moveable[rng.gen_range(0, moveable.len())];
+                    new_computers[com_i].go(input, next, &mut new_grid);
                     new_moves.insert(insert_i, (com_i, next));
+                    new.push((com_i, next));
                     for &(com_i, next) in new_moves.iter().skip(insert_i) {
-                        if !new_computers[com_i].go(input, next, &mut new_grid) {
-                            continue 'lp;
+                        if new_computers[com_i].go(input, next, &mut new_grid) {
+                            new.push((com_i, next));
                         }
                     }
+                    new_moves = new;
                 }
             }
             1 => {
@@ -199,6 +204,7 @@ fn local_search(
             best_connects = connects.clone();
         }
     }
+    // eprintln!("count: {}", count);
     eprintln!("best_score: {}", best_score);
     let moves = {
         let mut mv = vec![];
