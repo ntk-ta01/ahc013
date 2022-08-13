@@ -19,6 +19,7 @@ fn main() {
                     cs.push(Computer {
                         posi: (i, j),
                         kind: in_element,
+                        connect: vec![],
                     });
                 }
             }
@@ -53,44 +54,81 @@ fn annealing(
     let mut temp = T0;
     let mut prob;
 
-    let mut moves = vec![];
-    let mut connects = vec![];
-    let (mut score, mut best_connects) = {
-        let mut grid = start_grid.to_owned();
-        let mut computers = start_computers.to_owned();
-        for _ in 0..input.k * 15 {
-            let mut moveable = vec![];
-            for (i, computer) in computers.iter().enumerate() {
-                for &(di, dj) in DIJ.iter() {
-                    let ni = computer.posi.0 + di;
-                    let nj = computer.posi.1 + dj;
-                    if input.n <= ni || input.n <= nj {
-                        continue;
-                    }
-                    match grid[ni][nj] {
-                        Cell::Empty => moveable.push((i, (ni, nj))),
-                        Cell::Cable { kind } => {
-                            if kind == computer.kind {
-                                moveable.push((i, (ni, nj)));
-                            }
-                        }
-                        Cell::Computer { index: _ } => {}
-                    }
-                }
-            }
-            if moveable.is_empty() {
-                break;
-            }
-            let (com_i, next) = moveable[rng.gen_range(0, moveable.len())];
-            if !computers[com_i].go(input, next, &mut grid) {
-                unreachable!();
-            }
-            moves.push((com_i, next));
-        }
+    let mut moves: Vec<(usize, (usize, usize))> = vec![];
+    let mut connects: Vec<(usize, usize, usize, usize)> = vec![];
+    // let (mut score, mut best_connects) = {
+    //     let mut grid = start_grid.to_owned();
+    //     let mut computers = start_computers.to_owned();
+    //     let mut moveable = vec![];
+    //     for (i, computer) in computers.iter().enumerate() {
+    //         for &(di, dj) in DIJ.iter() {
+    //             let ni = computer.posi.0 + di;
+    //             let nj = computer.posi.1 + dj;
+    //             if input.n <= ni || input.n <= nj {
+    //                 continue;
+    //             }
+    //             match grid[ni][nj] {
+    //                 Cell::Empty => moveable.push((i, (ni, nj))),
+    //                 Cell::Cable { kind } => {
+    //                     if kind == computer.kind {
+    //                         moveable.push((i, (ni, nj)));
+    //                     }
+    //                 }
+    //                 Cell::Computer { index: _ } => {}
+    //             }
+    //         }
+    //     }
+    //     for _ in 0..input.k * 15 {
+    //         if moveable.is_empty() {
+    //             break;
+    //         }
+    //         let (com_i, next) = moveable[rng.gen_range(0, moveable.len())];
+    //         let prev = computers[com_i].posi;
+    //         if !computers[com_i].go(input, next, &mut grid) {
+    //             unreachable!();
+    //         }
+    //         moves.push((com_i, next));
+    //         // moveableを変化させる
+    //         let mut new_moveable = vec![];
+    //         // moveable.push((com_i, prev)); // 戻すような操作は加えない
+    //         // prev以外の方向に動かせるかは調べる
+    //         for &(di, dj) in DIJ.iter() {
+    //             let ni = next.0 + di;
+    //             let nj = next.1 + dj;
+    //             if input.n <= ni || input.n <= nj || (ni, nj) == prev {
+    //                 continue;
+    //             }
+    //             if grid[ni][nj].is_empty() {
+    //                 new_moveable.push((com_i, (ni, nj)));
+    //             }
+    //         }
+    //         // prevから4近傍を見る
+    //         for &(di, dj) in DIJ.iter() {
+    //             let ni = prev.0 + di;
+    //             let nj = prev.1 + dj;
+    //             if input.n <= ni || input.n <= nj || (ni, nj) == next {
+    //                 continue;
+    //             }
+    //             // prevのところが空きマスになるので、(ni, nj)にComputerがあればmoveableになる
+    //             if let Cell::Computer { index } = grid[ni][nj] {
+    //                 new_moveable.push((index, prev));
+    //             }
+    //         }
+    //         // old_moveableで移動先がnextだったやつと、m.0 == com_iは不採用
+    //         for m in moveable {
+    //             if m.1 == next || m.0 == com_i {
+    //                 continue;
+    //             }
+    //             new_moveable.push(m);
+    //         }
+    //         moveable = new_moveable;
+    //     }
 
-        compute_score(input, &mut grid, &mut computers, moves.len())
-    };
+    //     compute_score(input, &mut grid, &computers, moves.len())
+    // };
 
+    let mut score = 0;
+    let mut best_connects = vec![];
     let mut best_score = score;
     let mut best_moves = moves.clone();
     // movesの順にcomputerを動かす
@@ -187,7 +225,7 @@ fn annealing(
 
         // 近傍解作成ここまで
         let (new_score, new_connect) =
-            compute_score(input, &mut new_grid, &mut new_computers, new_moves.len());
+            compute_score(input, &mut new_grid, &new_computers, new_moves.len());
         prob = f64::exp((new_score - score) as f64 / temp);
         if score < new_score || rng.gen_bool(prob) {
             score = new_score;
@@ -227,7 +265,7 @@ fn annealing(
 fn compute_score(
     input: &Input,
     grid: &mut [Vec<Cell>],
-    computers: &mut [Computer],
+    computers: &[Computer],
     move_time: usize,
 ) -> (i64, Vec<(usize, usize, usize, usize)>) {
     let mut score = 0;
@@ -283,8 +321,8 @@ fn compute_score(
         }
     }
 
-    for (i, &computer1) in computers.iter().enumerate() {
-        for &computer2 in computers.iter().skip(i + 1) {
+    for (i, computer1) in computers.iter().enumerate() {
+        for computer2 in computers.iter().skip(i + 1) {
             if uf.same(
                 computer1.posi.0 * input.n + computer1.posi.1,
                 computer2.posi.0 * input.n + computer2.posi.1,
@@ -321,10 +359,11 @@ impl Cell {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 struct Computer {
     posi: (usize, usize),
     kind: usize,
+    connect: Vec<(usize, usize)>, // (direction, computer_index)
 }
 
 impl Computer {
@@ -461,13 +500,14 @@ mod tests {
                         cs.push(Computer {
                             posi: (i, j),
                             kind: in_element,
+                            connect: vec![],
                         });
                     }
                 }
             }
             (g, cs)
         };
-        let (score, output_connect) = compute_score(&input, &mut grid, &mut computers, 0);
+        let (score, output_connect) = compute_score(&input, &mut grid, &computers, 0);
         println!("{}", output_connect.len());
         for (e, f, g, h) in output_connect.iter() {
             println!("{} {} {} {}", e, f, g, h);
