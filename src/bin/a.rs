@@ -117,7 +117,7 @@ fn annealing(
         match neigh {
             0 => {
                 // insert
-                for _ in 0..rng.gen_range(1, 5) {
+                for _ in 0..rng.gen_range(1, 6) {
                     if 100 * input.k <= new_moves.len() {
                         continue 'lp;
                     }
@@ -235,13 +235,10 @@ fn compute_score(
     let mut uf = UnionFind::new(input.n * input.n);
     'connect_lp: for i in 0..input.n {
         for j in 0..input.n {
-            if !grid[i][j].is_computer() {
-                continue;
-            }
             let now_computer = if let Cell::Computer { index } = grid[i][j] {
                 &computers[index]
             } else {
-                unreachable!()
+                continue;
             };
             for &(di, dj) in DIJ.iter() {
                 let mut ni = i;
