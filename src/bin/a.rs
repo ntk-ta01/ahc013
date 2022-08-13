@@ -19,7 +19,7 @@ fn main() {
                     cs.push(Computer {
                         posi: (i, j),
                         kind: in_element,
-                        connect: vec![],
+                        // connect: vec![],
                     });
                 }
             }
@@ -191,10 +191,11 @@ fn annealing(
 
         let mut new_connects = vec![];
         let mut uf = UnionFind::new(input.n * input.n);
-        'connect_lp: for computer in new_computers.iter() {
-            let i = computer.posi.0;
-            let j = computer.posi.1;
+        'connect_lp: for id1 in 0..new_computers.len() {
+            let i = new_computers[id1].posi.0;
+            let j = new_computers[id1].posi.1;
             for &(di, dj) in DIJ.iter() {
+                // TODO: new_computers[id1].connectをチェックしてこの部分を高速化
                 let mut ni = i;
                 let mut nj = j;
                 for len in 1..input.n {
@@ -213,15 +214,16 @@ fn annealing(
                         break;
                     }
                     let id2 = new_grid[ni][nj].index();
-                    let next_computer = &new_computers[id2];
-                    if computer.kind == next_computer.kind {
+                    if new_computers[id1].kind == new_computers[id2].kind {
+                        // new_computers[id1].connect.push(id2);
+                        // new_computers[id2].connect.push(id1);
                         new_connects.push((i, j, ni, nj));
                         uf.unite(i * input.n + j, ni * input.n + nj);
                         for _ in 0..len - 1 {
                             ni -= di;
                             nj -= dj;
                             new_grid[ni][nj] = Cell::Cable {
-                                kind: computer.kind,
+                                kind: new_computers[id1].kind,
                             };
                         }
                     }
@@ -330,7 +332,7 @@ impl Cell {
 struct Computer {
     posi: (usize, usize),
     kind: usize,
-    connect: Vec<(usize, usize)>, // (direction, computer_index)
+    // connect: Vec<usize>, // computer_index
 }
 
 impl Computer {
