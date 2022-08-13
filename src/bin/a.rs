@@ -49,7 +49,7 @@ fn annealing(
     start_grid: &mut [Vec<Cell>],
     start_computers: &mut [Computer],
 ) -> (Output, Output) {
-    const T0: f64 = 50.0;
+    const T0: f64 = 25.0;
     const T1: f64 = 0.01;
     let mut temp = T0;
     let mut prob;
@@ -85,55 +85,91 @@ fn annealing(
         match neigh {
             0 => {
                 // insert
+                if 100 * input.k <= new_moves.len() {
+                    continue 'lp;
+                }
+                new_grid = start_grid.to_owned();
+                new_computers = start_computers.to_owned();
+                let insert_i = if new_moves.is_empty() {
+                    0
+                } else {
+                    rng.gen_range(0, new_moves.len())
+                };
+                let mut new = vec![];
+                for &(com_i, next) in new_moves.iter().take(insert_i) {
+                    if !new_computers[com_i].go(input, next, &mut new_grid) {
+                        unreachable!()
+                    }
+                    new.push((com_i, next));
+                }
+                let mut moveable = vec![];
+                for (i, computer) in new_computers.iter().enumerate() {
+                    for &(di, dj) in DIJ.iter() {
+                        let ni = computer.posi.0 + di;
+                        let nj = computer.posi.1 + dj;
+                        if input.n <= ni || input.n <= nj {
+                            continue;
+                        }
+                        match new_grid[ni][nj] {
+                            Cell::Empty => moveable.push((i, (ni, nj))),
+                            Cell::Computer { index: _ } => {}
+                            Cell::Cable { kind: _ } => {
+                                unreachable!();
+                            }
+                        }
+                    }
+                }
                 for _ in 0..rng.gen_range(1, 6) {
-                    if 100 * input.k <= new_moves.len() {
-                        continue 'lp;
-                    }
-                    let mut new = vec![];
-                    new_grid = start_grid.to_owned();
-                    new_computers = start_computers.to_owned();
-                    let insert_i = if new_moves.is_empty() {
-                        0
-                    } else {
-                        rng.gen_range(0, new_moves.len())
-                    };
-                    for &(com_i, next) in new_moves.iter().take(insert_i) {
-                        if !new_computers[com_i].go(input, next, &mut new_grid) {
-                            unreachable!()
-                        }
-                        new.push((com_i, next));
-                    }
-                    let mut moveable = vec![];
-                    for (i, computer) in new_computers.iter().enumerate() {
-                        for &(di, dj) in DIJ.iter() {
-                            let ni = computer.posi.0 + di;
-                            let nj = computer.posi.1 + dj;
-                            if input.n <= ni || input.n <= nj {
-                                continue;
-                            }
-                            match new_grid[ni][nj] {
-                                Cell::Empty => moveable.push((i, (ni, nj))),
-                                Cell::Computer { index: _ } => {}
-                                Cell::Cable { kind: _ } => {
-                                    unreachable!();
-                                }
-                            }
-                        }
-                    }
                     if moveable.is_empty() {
-                        continue;
+                        break;
                     }
                     let (com_i, next) = moveable[rng.gen_range(0, moveable.len())];
-                    new_computers[com_i].go(input, next, &mut new_grid);
-                    new_moves.insert(insert_i, (com_i, next));
+                    let prev = new_computers[com_i].posi;
+                    if !new_computers[com_i].go(input, next, &mut new_grid) {
+                        unreachable!();
+                    }
                     new.push((com_i, next));
-                    for &(com_i, next) in new_moves.iter().skip(insert_i) {
-                        if new_computers[com_i].go(input, next, &mut new_grid) {
-                            new.push((com_i, next));
+                    // moveableを変化させる
+                    let mut new_moveable = vec![];
+                    // moveable.push((com_i, prev)); // 戻すような操作は加えない
+                    // com_iがprev以外の方向に動かせるかは調べる
+                    for &(di, dj) in DIJ.iter() {
+                        let ni = next.0 + di;
+                        let nj = next.1 + dj;
+                        if input.n <= ni || input.n <= nj || (ni, nj) == prev {
+                            continue;
+                        }
+                        if new_grid[ni][nj].is_empty() {
+                            new_moveable.push((com_i, (ni, nj)));
                         }
                     }
-                    new_moves = new;
+                    // prevから4近傍を見る
+                    for &(di, dj) in DIJ.iter() {
+                        let ni = prev.0 + di;
+                        let nj = prev.1 + dj;
+                        if input.n <= ni || input.n <= nj || (ni, nj) == next {
+                            continue;
+                        }
+                        // prevのところが空きマスになるので、(ni, nj)にComputerがあればmoveableになる
+                        if let Cell::Computer { index } = new_grid[ni][nj] {
+                            new_moveable.push((index, prev));
+                        }
+                    }
+                    // old_moveableで移動先がnextだったやつと、m.0 == com_iは不採用
+                    for m in moveable {
+                        if m.1 == next || m.0 == com_i {
+                            continue;
+                        }
+                        new_moveable.push(m);
+                    }
+                    moveable = new_moveable;
                 }
+                for &(com_i, next) in new_moves.iter().skip(insert_i) {
+                    if new_computers[com_i].go(input, next, &mut new_grid) {
+                        new.push((com_i, next));
+                    }
+                }
+                new_moves = new;
             }
             1 => {
                 // remove
