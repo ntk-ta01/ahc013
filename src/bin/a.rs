@@ -237,52 +237,47 @@ fn compute_score(
     let mut score = 0;
     let mut output_connect = vec![];
     let mut uf = UnionFind::new(input.n * input.n);
-    'connect_lp: for i in 0..input.n {
-        for j in 0..input.n {
-            let now_computer = if let Cell::Computer { index } = grid[i][j] {
-                &computers[index]
-            } else {
-                continue;
-            };
-            for &(di, dj) in DIJ.iter() {
-                let mut ni = i;
-                let mut nj = j;
-                for len in 1..input.n {
-                    ni += di;
-                    nj += dj;
-                    if input.n <= ni || input.n <= nj {
-                        break;
-                    }
-                    if let Cell::Cable { kind: _ } = grid[ni][nj] {
-                        break;
-                    }
-                    if Cell::Empty == grid[ni][nj] {
-                        continue;
-                    }
-                    if uf.same(i * input.n + j, ni * input.n + nj) {
-                        break;
-                    }
-                    let next_computer = if let Cell::Computer { index } = grid[ni][nj] {
-                        &computers[index]
-                    } else {
-                        unreachable!()
-                    };
-                    if now_computer.kind == next_computer.kind {
-                        output_connect.push((i, j, ni, nj));
-                        uf.unite(i * input.n + j, ni * input.n + nj);
-                        for _ in 0..len - 1 {
-                            ni -= di;
-                            nj -= dj;
-                            grid[ni][nj] = Cell::Cable {
-                                kind: now_computer.kind,
-                            };
-                        }
-                    }
-                    if 100 * input.k == move_time + output_connect.len() {
-                        break 'connect_lp;
-                    }
+    'connect_lp: for computer in computers.iter() {
+        let i = computer.posi.0;
+        let j = computer.posi.1;
+        for &(di, dj) in DIJ.iter() {
+            let mut ni = i;
+            let mut nj = j;
+            for len in 1..input.n {
+                ni += di;
+                nj += dj;
+                if input.n <= ni || input.n <= nj {
                     break;
                 }
+                if let Cell::Cable { kind: _ } = grid[ni][nj] {
+                    break;
+                }
+                if Cell::Empty == grid[ni][nj] {
+                    continue;
+                }
+                if uf.same(i * input.n + j, ni * input.n + nj) {
+                    break;
+                }
+                let next_computer = if let Cell::Computer { index } = grid[ni][nj] {
+                    &computers[index]
+                } else {
+                    unreachable!()
+                };
+                if computer.kind == next_computer.kind {
+                    output_connect.push((i, j, ni, nj));
+                    uf.unite(i * input.n + j, ni * input.n + nj);
+                    for _ in 0..len - 1 {
+                        ni -= di;
+                        nj -= dj;
+                        grid[ni][nj] = Cell::Cable {
+                            kind: computer.kind,
+                        };
+                    }
+                }
+                if 100 * input.k == move_time + output_connect.len() {
+                    break 'connect_lp;
+                }
+                break;
             }
         }
     }
@@ -302,6 +297,20 @@ fn compute_score(
         }
     }
     (score, output_connect)
+}
+
+fn dist(p1: (usize, usize), p2: (usize, usize)) -> usize {
+    let dx = if p1.0 > p2.0 {
+        p1.0 - p2.0
+    } else {
+        p2.0 - p1.0
+    };
+    let dy = if p1.1 > p2.1 {
+        p1.1 - p2.1
+    } else {
+        p2.1 - p1.1
+    };
+    dx * dx + dy * dy
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
