@@ -19,7 +19,7 @@ fn main() {
                     cs.push(Computer {
                         posi: (i, j),
                         kind: in_element,
-                        // connect: vec![],
+                        connect: vec![],
                     });
                 }
             }
@@ -54,7 +54,7 @@ fn annealing(
     let mut temp = T0;
     let mut prob;
 
-    let mut moves: Vec<(usize, (usize, usize))> = vec![];
+    let mut moves: Vec<(usize, (usize, usize), (usize, usize))> = vec![];
     let mut connects: Vec<(usize, usize, usize, usize)> = vec![];
 
     let mut score = 0;
@@ -66,6 +66,9 @@ fn annealing(
     let mut count = 0;
     // let mut neigh0 = 0;
     // let mut neigh1 = 0;
+
+    let mut grid = start_grid.to_owned();
+    let mut computers = start_computers.to_owned();
     'lp: loop {
         if count >= 100 {
             let passed = timer.get_time() / TIMELIMIT;
@@ -77,8 +80,6 @@ fn annealing(
         }
         count += 1;
         let mut new_moves = moves.clone();
-        let mut new_grid = start_grid.to_owned();
-        let mut new_computers = start_computers.to_owned();
         // 近傍解作成
         let move_neigh_count = 2;
         let move_neigh = rng.gen_range(0, move_neigh_count);
@@ -88,33 +89,75 @@ fn annealing(
                 if 100 * input.k <= new_moves.len() {
                     continue 'lp;
                 }
-                new_grid = start_grid.to_owned();
-                new_computers = start_computers.to_owned();
                 let insert_i = if new_moves.is_empty() {
                     0
                 } else {
                     rng.gen_range(0, new_moves.len())
                 };
                 let mut new = vec![];
-                for &(com_i, next) in new_moves.iter().take(insert_i) {
-                    if !new_computers[com_i].go(input, next, &mut new_grid) {
-                        unreachable!()
+                for &(com_i, prev, next) in new_moves.iter().take(insert_i) {
+                    new.push((com_i, prev, next));
+                }
+                for &(com_i, prev, next) in new_moves.iter().skip(insert_i).rev() {
+                    if grid[prev.0][prev.1].is_cable() {
+                        // cableを削除する
+                        if prev.0 == next.0 && grid[prev.0][prev.1].is_vertical() {
+                            // 横に移動して、cableが縦なら繋がっているところも削除
+                            for (_, &(di, dj)) in
+                                DIJ.iter().enumerate().filter(|(dir, _)| *dir & 1 == 1)
+                            {
+                                let mut ni = prev.0;
+                                let mut nj = prev.1;
+                                for _ in 1..input.n {
+                                    ni += di;
+                                    nj += dj;
+                                    if grid[ni][nj].is_cable() {
+                                        grid[ni][nj] = Cell::Empty;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if prev.1 == next.1 && grid[prev.0][prev.1].is_horizon() {
+                            // 縦に移動して、cableが横なら繋がっているところも削除
+                            for (_, &(di, dj)) in
+                                DIJ.iter().enumerate().filter(|(dir, _)| *dir & 1 == 0)
+                            {
+                                let mut ni = prev.0;
+                                let mut nj = prev.1;
+                                for _ in 1..input.n {
+                                    ni += di;
+                                    nj += dj;
+                                    if grid[ni][nj].is_cable() {
+                                        grid[ni][nj] = Cell::Empty;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        grid[prev.0][prev.1] = Cell::Empty;
                     }
-                    new.push((com_i, next));
+                    if !computers[com_i].go(input, prev, &mut grid) {
+                        unreachable!();
+                    }
                 }
                 let mut moveable = vec![];
-                for (i, computer) in new_computers.iter().enumerate() {
+                for (i, computer) in computers.iter().enumerate() {
                     for &(di, dj) in DIJ.iter() {
                         let ni = computer.posi.0 + di;
                         let nj = computer.posi.1 + dj;
                         if input.n <= ni || input.n <= nj {
                             continue;
                         }
-                        match new_grid[ni][nj] {
+                        match grid[ni][nj] {
                             Cell::Empty => moveable.push((i, (ni, nj))),
                             Cell::Computer { index: _ } => {}
-                            Cell::Cable { kind: _ } => {
-                                unreachable!();
+                            Cell::Cable { kind, dir: _ } => {
+                                if computer.kind == kind {
+                                    moveable.push((i, (ni, nj)));
+                                }
                             }
                         }
                     }
@@ -124,11 +167,52 @@ fn annealing(
                         break;
                     }
                     let (com_i, next) = moveable[rng.gen_range(0, moveable.len())];
-                    let prev = new_computers[com_i].posi;
-                    if !new_computers[com_i].go(input, next, &mut new_grid) {
+                    let prev = computers[com_i].posi;
+                    // cableに移動するときは、nextのcableを削除する
+                    if grid[next.0][next.1].is_cable() {
+                        // cableを削除する
+                        if prev.0 == next.0 && grid[next.0][next.1].is_vertical() {
+                            // 横に移動して、cableが縦なら繋がっているところも削除
+                            for (_, &(di, dj)) in
+                                DIJ.iter().enumerate().filter(|(dir, _)| *dir & 1 == 1)
+                            {
+                                let mut ni = next.0;
+                                let mut nj = next.1;
+                                for _ in 1..input.n {
+                                    ni += di;
+                                    nj += dj;
+                                    if grid[ni][nj].is_cable() {
+                                        grid[ni][nj] = Cell::Empty;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if prev.1 == next.1 && grid[next.0][next.1].is_horizon() {
+                            // 縦に移動して、cableが横なら繋がっているところも削除
+                            for (_, &(di, dj)) in
+                                DIJ.iter().enumerate().filter(|(dir, _)| *dir & 1 == 0)
+                            {
+                                let mut ni = next.0;
+                                let mut nj = next.1;
+                                for _ in 1..input.n {
+                                    ni += di;
+                                    nj += dj;
+                                    if grid[ni][nj].is_cable() {
+                                        grid[ni][nj] = Cell::Empty;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        grid[next.0][next.1] = Cell::Empty;
+                    }
+                    if !computers[com_i].go(input, next, &mut grid) {
                         unreachable!();
                     }
-                    new.push((com_i, next));
+                    new.push((com_i, prev, next));
                     // moveableを変化させる
                     let mut new_moveable = vec![];
                     // moveable.push((com_i, prev)); // 戻すような操作は加えない
@@ -139,8 +223,14 @@ fn annealing(
                         if input.n <= ni || input.n <= nj || (ni, nj) == prev {
                             continue;
                         }
-                        if new_grid[ni][nj].is_empty() {
+                        if grid[ni][nj].is_empty() {
                             new_moveable.push((com_i, (ni, nj)));
+                        }
+                        if grid[ni][nj].is_cable() {
+                            let kind = grid[ni][nj].kind();
+                            if computers[com_i].kind == kind {
+                                new_moveable.push((com_i, (ni, nj)));
+                            }
                         }
                     }
                     // prevから4近傍を見る
@@ -151,7 +241,7 @@ fn annealing(
                             continue;
                         }
                         // prevのところが空きマスになるので、(ni, nj)にComputerがあればmoveableになる
-                        if let Cell::Computer { index } = new_grid[ni][nj] {
+                        if let Cell::Computer { index } = grid[ni][nj] {
                             new_moveable.push((index, prev));
                         }
                     }
@@ -164,15 +254,17 @@ fn annealing(
                     }
                     moveable = new_moveable;
                 }
-                for &(com_i, next) in new_moves.iter().skip(insert_i) {
-                    if new_computers[com_i].go(input, next, &mut new_grid) {
-                        new.push((com_i, next));
+                for &(com_i, prev, next) in new_moves.iter().skip(insert_i) {
+                    if computers[com_i].go(input, next, &mut grid) {
+                        new.push((com_i, prev, next));
                     }
                 }
                 new_moves = new;
             }
             1 => {
                 // remove
+                let mut new_grid = start_grid.to_owned();
+                let mut new_computers = start_computers.to_owned();
                 for _ in 0..rng.gen_range(1, input.k * 2) {
                     if new_moves.is_empty() {
                         break;
@@ -180,21 +272,23 @@ fn annealing(
                     let i = rng.gen_range(0, new_moves.len());
                     new_moves.remove(i);
                 }
-                for &(com_i, next) in new_moves.iter() {
+                for &(com_i, _, next) in new_moves.iter() {
                     if !new_computers[com_i].go(input, next, &mut new_grid) {
                         continue 'lp;
                     }
                 }
+                grid = new_grid;
+                computers = new_computers;
             }
             _ => unreachable!(),
         }
 
         let mut new_connects = vec![];
         let mut uf = UnionFind::new(input.n * input.n);
-        'connect_lp: for id1 in 0..new_computers.len() {
-            let i = new_computers[id1].posi.0;
-            let j = new_computers[id1].posi.1;
-            for &(di, dj) in DIJ.iter() {
+        'connect_lp: for id1 in 0..computers.len() {
+            let i = computers[id1].posi.0;
+            let j = computers[id1].posi.1;
+            for (dir, &(di, dj)) in DIJ.iter().enumerate() {
                 // TODO: new_computers[id1].connectをチェックしてこの部分を高速化
                 let mut ni = i;
                 let mut nj = j;
@@ -204,17 +298,17 @@ fn annealing(
                     if input.n <= ni || input.n <= nj {
                         break;
                     }
-                    if new_grid[ni][nj].is_empty() {
+                    if grid[ni][nj].is_empty() {
                         continue;
                     }
-                    if let Cell::Cable { kind: _ } = new_grid[ni][nj] {
+                    if grid[ni][nj].is_cable() {
                         break;
                     }
                     if uf.same(i * input.n + j, ni * input.n + nj) {
                         break;
                     }
-                    let id2 = new_grid[ni][nj].index();
-                    if new_computers[id1].kind == new_computers[id2].kind {
+                    let id2 = grid[ni][nj].index();
+                    if computers[id1].kind == computers[id2].kind {
                         // new_computers[id1].connect.push(id2);
                         // new_computers[id2].connect.push(id1);
                         new_connects.push((i, j, ni, nj));
@@ -222,8 +316,9 @@ fn annealing(
                         for _ in 0..len - 1 {
                             ni -= di;
                             nj -= dj;
-                            new_grid[ni][nj] = Cell::Cable {
-                                kind: new_computers[id1].kind,
+                            grid[ni][nj] = Cell::Cable {
+                                kind: computers[id1].kind,
+                                dir,
                             };
                         }
                     }
@@ -236,12 +331,104 @@ fn annealing(
         }
 
         // 近傍解作成ここまで
-        let new_score = compute_score(input, &new_computers, &mut uf);
+        let new_score = compute_score(input, &computers, &mut uf);
         prob = f64::exp((new_score - score) as f64 / temp);
         if score < new_score || rng.gen_bool(prob) {
             score = new_score;
             moves = new_moves;
             connects = new_connects;
+        } else {
+            for &(com_i, prev, next) in new_moves.iter().rev() {
+                if grid[prev.0][prev.1].is_cable() {
+                    // cableを削除する
+                    if prev.0 == next.0 && grid[prev.0][prev.1].is_vertical() {
+                        // 横に移動して、cableが縦なら繋がっているところも削除
+                        for (_, &(di, dj)) in
+                            DIJ.iter().enumerate().filter(|(dir, _)| *dir & 1 == 1)
+                        {
+                            let mut ni = prev.0;
+                            let mut nj = prev.1;
+                            for _ in 1..input.n {
+                                ni += di;
+                                nj += dj;
+                                if grid[ni][nj].is_cable() {
+                                    grid[ni][nj] = Cell::Empty;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if prev.1 == next.1 && grid[prev.0][prev.1].is_horizon() {
+                        // 縦に移動して、cableが横なら繋がっているところも削除
+                        for (_, &(di, dj)) in
+                            DIJ.iter().enumerate().filter(|(dir, _)| *dir & 1 == 0)
+                        {
+                            let mut ni = prev.0;
+                            let mut nj = prev.1;
+                            for _ in 1..input.n {
+                                ni += di;
+                                nj += dj;
+                                if grid[ni][nj].is_cable() {
+                                    grid[ni][nj] = Cell::Empty;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    grid[prev.0][prev.1] = Cell::Empty;
+                }
+                if !computers[com_i].go(input, prev, &mut grid) {
+                    unreachable!();
+                }
+            }
+            for &(com_i, prev, next) in moves.iter() {
+                // cableに移動するときは、nextのcableを削除する
+                if grid[next.0][next.1].is_cable() {
+                    // cableを削除する
+                    if prev.0 == next.0 && grid[next.0][next.1].is_vertical() {
+                        // 横に移動して、cableが縦なら繋がっているところも削除
+                        for (_, &(di, dj)) in
+                            DIJ.iter().enumerate().filter(|(dir, _)| *dir & 1 == 1)
+                        {
+                            let mut ni = next.0;
+                            let mut nj = next.1;
+                            for _ in 1..input.n {
+                                ni += di;
+                                nj += dj;
+                                if grid[ni][nj].is_cable() {
+                                    grid[ni][nj] = Cell::Empty;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if prev.1 == next.1 && grid[next.0][next.1].is_horizon() {
+                        // 縦に移動して、cableが横なら繋がっているところも削除
+                        for (_, &(di, dj)) in
+                            DIJ.iter().enumerate().filter(|(dir, _)| *dir & 1 == 0)
+                        {
+                            let mut ni = next.0;
+                            let mut nj = next.1;
+                            for _ in 1..input.n {
+                                ni += di;
+                                nj += dj;
+                                if grid[ni][nj].is_cable() {
+                                    grid[ni][nj] = Cell::Empty;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    grid[next.0][next.1] = Cell::Empty;
+                }
+                if !computers[com_i].go(input, next, &mut grid) {
+                    unreachable!();
+                }
+            }
         }
 
         if best_score < score {
@@ -263,9 +450,8 @@ fn annealing(
         let mut mv = vec![];
         let grid = start_grid;
         let computers = start_computers;
-        for (com_i, next) in best_moves {
-            let pos = computers[com_i].posi;
-            mv.push((pos.0, pos.1, next.0, next.1));
+        for (com_i, prev, next) in best_moves {
+            mv.push((prev.0, prev.1, next.0, next.1));
             computers[com_i].go(input, next, grid);
         }
         mv
@@ -311,12 +497,16 @@ fn dist(p1: (usize, usize), p2: (usize, usize)) -> usize {
 enum Cell {
     Empty,
     Computer { index: usize },
-    Cable { kind: usize },
+    Cable { kind: usize, dir: usize },
 }
 
 impl Cell {
     fn is_empty(&self) -> bool {
         matches!(*self, Cell::Empty)
+    }
+
+    fn is_cable(&self) -> bool {
+        matches!(*self, Cell::Cable { kind: _, dir: _ })
     }
 
     fn index(&self) -> usize {
@@ -326,13 +516,38 @@ impl Cell {
             panic!("cell is not computer");
         }
     }
+
+    fn dir(&self) -> usize {
+        if let Cell::Cable { kind: _, dir } = self {
+            *dir
+        } else {
+            panic!("cell is not cable");
+        }
+    }
+
+    fn kind(&self) -> usize {
+        if let Cell::Cable { kind, dir: _ } = self {
+            *kind
+        } else {
+            panic!("cell is not cable");
+        }
+    }
+
+    fn is_vertical(&self) -> bool {
+        let dir = self.dir();
+        dir & 1 == 1
+    }
+
+    fn is_horizon(&self) -> bool {
+        !self.is_vertical()
+    }
 }
 
 #[derive(Clone)]
 struct Computer {
     posi: (usize, usize),
     kind: usize,
-    // connect: Vec<usize>, // computer_index
+    connect: Vec<usize>, // computer_index
 }
 
 impl Computer {
