@@ -8,7 +8,7 @@ type Output = Vec<(usize, usize, usize, usize)>;
 fn main() {
     let timer = Timer::new();
     let input = Input::new();
-    let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(0);
+    let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(356296);
     let (mut grid, mut computers) = {
         let mut g = vec![vec![Cell::Empty; input.n]; input.n];
         let mut cs = vec![];
@@ -58,9 +58,9 @@ fn annealing(
     let mut connects: Vec<(usize, usize, usize, usize)> = vec![];
 
     let mut score = 0;
-    let mut best_connects = vec![];
     let mut best_score = score;
-    let mut best_moves = moves.clone();
+    let mut best_moves = vec![];
+    let mut best_connects = vec![];
     // movesの順にcomputerを動かす
     // どの向きに動かすかは探索する（今はランダム）
     let mut count = 0;
@@ -80,9 +80,9 @@ fn annealing(
         let mut new_grid = start_grid.to_owned();
         let mut new_computers = start_computers.to_owned();
         // 近傍解作成
-        let neigh_count = 2;
-        let neigh = rng.gen_range(0, neigh_count);
-        match neigh {
+        let move_neigh_count = 2;
+        let move_neigh = rng.gen_range(0, move_neigh_count);
+        match move_neigh {
             0 => {
                 // insert
                 if 100 * input.k <= new_moves.len() {
@@ -189,14 +189,57 @@ fn annealing(
             _ => unreachable!(),
         }
 
+        let mut new_connects = vec![];
+        let mut uf = UnionFind::new(input.n * input.n);
+        'connect_lp: for computer in new_computers.iter() {
+            let i = computer.posi.0;
+            let j = computer.posi.1;
+            for &(di, dj) in DIJ.iter() {
+                let mut ni = i;
+                let mut nj = j;
+                for len in 1..input.n {
+                    ni += di;
+                    nj += dj;
+                    if input.n <= ni || input.n <= nj {
+                        break;
+                    }
+                    if new_grid[ni][nj].is_empty() {
+                        continue;
+                    }
+                    if let Cell::Cable { kind: _ } = new_grid[ni][nj] {
+                        break;
+                    }
+                    if uf.same(i * input.n + j, ni * input.n + nj) {
+                        break;
+                    }
+                    let id2 = new_grid[ni][nj].index();
+                    let next_computer = &new_computers[id2];
+                    if computer.kind == next_computer.kind {
+                        new_connects.push((i, j, ni, nj));
+                        uf.unite(i * input.n + j, ni * input.n + nj);
+                        for _ in 0..len - 1 {
+                            ni -= di;
+                            nj -= dj;
+                            new_grid[ni][nj] = Cell::Cable {
+                                kind: computer.kind,
+                            };
+                        }
+                    }
+                    if 100 * input.k <= new_moves.len() + new_connects.len() {
+                        break 'connect_lp;
+                    }
+                    break;
+                }
+            }
+        }
+
         // 近傍解作成ここまで
-        let (new_score, new_connect) =
-            compute_score(input, &mut new_grid, &new_computers, new_moves.len());
+        let new_score = compute_score(input, &new_computers, &mut uf);
         prob = f64::exp((new_score - score) as f64 / temp);
         if score < new_score || rng.gen_bool(prob) {
             score = new_score;
             moves = new_moves;
-            connects = new_connect;
+            connects = new_connects;
         }
 
         if best_score < score {
@@ -228,60 +271,8 @@ fn annealing(
     (moves, best_connects)
 }
 
-fn compute_score(
-    input: &Input,
-    grid: &mut [Vec<Cell>],
-    computers: &[Computer],
-    move_time: usize,
-) -> (i64, Vec<(usize, usize, usize, usize)>) {
+fn compute_score(input: &Input, computers: &[Computer], uf: &mut UnionFind) -> i64 {
     let mut score = 0;
-    let mut output_connect = vec![];
-    let mut uf = UnionFind::new(input.n * input.n);
-    'connect_lp: for computer in computers.iter() {
-        let i = computer.posi.0;
-        let j = computer.posi.1;
-        for &(di, dj) in DIJ.iter() {
-            let mut ni = i;
-            let mut nj = j;
-            for len in 1..input.n {
-                ni += di;
-                nj += dj;
-                if input.n <= ni || input.n <= nj {
-                    break;
-                }
-                if let Cell::Cable { kind: _ } = grid[ni][nj] {
-                    break;
-                }
-                if Cell::Empty == grid[ni][nj] {
-                    continue;
-                }
-                if uf.same(i * input.n + j, ni * input.n + nj) {
-                    break;
-                }
-                let next_computer = if let Cell::Computer { index } = grid[ni][nj] {
-                    &computers[index]
-                } else {
-                    unreachable!()
-                };
-                if computer.kind == next_computer.kind {
-                    output_connect.push((i, j, ni, nj));
-                    uf.unite(i * input.n + j, ni * input.n + nj);
-                    for _ in 0..len - 1 {
-                        ni -= di;
-                        nj -= dj;
-                        grid[ni][nj] = Cell::Cable {
-                            kind: computer.kind,
-                        };
-                    }
-                }
-                if 100 * input.k == move_time + output_connect.len() {
-                    break 'connect_lp;
-                }
-                break;
-            }
-        }
-    }
-
     for (i, computer1) in computers.iter().enumerate() {
         for computer2 in computers.iter().skip(i + 1) {
             if uf.same(
@@ -296,9 +287,10 @@ fn compute_score(
             }
         }
     }
-    (score, output_connect)
+    score
 }
 
+#[allow(dead_code)]
 fn dist(p1: (usize, usize), p2: (usize, usize)) -> usize {
     let dx = if p1.0 > p2.0 {
         p1.0 - p2.0
@@ -325,12 +317,12 @@ impl Cell {
         matches!(*self, Cell::Empty)
     }
 
-    fn is_computer(&self) -> bool {
-        matches!(*self, Cell::Computer { index: _ })
-    }
-
-    fn is_cable(&self) -> bool {
-        matches!(*self, Cell::Cable { kind: _ })
+    fn index(&self) -> usize {
+        if let Cell::Computer { index } = self {
+            *index
+        } else {
+            panic!("cell is not computer");
+        }
     }
 }
 
@@ -446,47 +438,5 @@ impl Timer {
 
     fn get_time(&self) -> f64 {
         get_time() - self.start_time
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn compute_score_works() {
-        let input = Input {
-            n: 5,
-            k: 3,
-            grid: vec![
-                vec![0, 2, 0, 2, 0],
-                vec![2, 1, 0, 2, 3],
-                vec![3, 0, 3, 0, 2],
-                vec![0, 1, 0, 3, 3],
-                vec![3, 2, 0, 3, 2],
-            ],
-        };
-        let (mut grid, mut computers) = {
-            let mut g = vec![vec![Cell::Empty; input.n]; input.n];
-            let mut cs = vec![];
-            for (i, (in_row, row)) in input.grid.iter().zip(g.iter_mut()).enumerate() {
-                for (j, (&in_element, element)) in in_row.iter().zip(row.iter_mut()).enumerate() {
-                    if in_element != 0 {
-                        *element = Cell::Computer { index: cs.len() };
-                        cs.push(Computer {
-                            posi: (i, j),
-                            kind: in_element,
-                            connect: vec![],
-                        });
-                    }
-                }
-            }
-            (g, cs)
-        };
-        let (score, output_connect) = compute_score(&input, &mut grid, &computers, 0);
-        println!("{}", output_connect.len());
-        for (e, f, g, h) in output_connect.iter() {
-            println!("{} {} {} {}", e, f, g, h);
-        }
-        println!("score: {}", score);
     }
 }
