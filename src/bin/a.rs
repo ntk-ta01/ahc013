@@ -1,6 +1,6 @@
 use rand::prelude::*;
 
-const TIMELIMIT: f64 = 2.8;
+const TIMELIMIT: f64 = 2.775;
 const DIJ: [(usize, usize); 4] = [(0, !0), (!0, 0), (0, 1), (1, 0)];
 // const DIR: [char; 4] = ['L', 'U', 'R', 'D'];
 type Output = Vec<(usize, usize, usize, usize)>;
@@ -19,7 +19,6 @@ fn main() {
                     cs.push(Computer {
                         posi: (i, j),
                         kind: in_element,
-                        connect: vec![],
                     });
                 }
             }
@@ -27,7 +26,7 @@ fn main() {
         (g, cs)
     };
     let (output_move, mut output_connect) =
-        annealing(&input, &timer, &mut rng, &mut grid, &mut computers);
+        unsafe { annealing(&input, &timer, &mut rng, &mut grid, &mut computers) };
 
     println!("{}", output_move.len());
     for (a, b, c, d) in output_move.iter() {
@@ -42,15 +41,15 @@ fn main() {
     }
 }
 
-fn annealing(
+unsafe fn annealing(
     input: &Input,
     timer: &Timer,
     rng: &mut rand_chacha::ChaCha20Rng,
     start_grid: &mut [Vec<Cell>],
     start_computers: &mut [Computer],
 ) -> (Output, Output) {
-    const T0: f64 = 30.0;
-    const T1: f64 = 0.01;
+    const T0: f64 = 20.5;
+    const T1: f64 = 1.00;
     let mut temp = T0;
     let mut prob;
 
@@ -97,9 +96,9 @@ fn annealing(
                 };
                 let mut new = vec![];
                 for &(com_i, next) in new_moves.iter().take(insert_i) {
-                    if !new_computers[com_i].go(input, next, &mut new_grid) {
-                        unreachable!()
-                    }
+                    new_computers
+                        .get_unchecked_mut(com_i)
+                        .go(input, next, &mut new_grid);
                     new.push((com_i, next));
                 }
                 let mut moveable = vec![];
@@ -110,7 +109,7 @@ fn annealing(
                         if input.n <= ni || input.n <= nj {
                             continue;
                         }
-                        match new_grid[ni][nj] {
+                        match *new_grid.get_unchecked(ni).get_unchecked(nj) {
                             Cell::Empty => moveable.push((i, (ni, nj))),
                             Cell::Computer { index: _ } => {}
                             Cell::Cable { kind: _ } => {
@@ -124,10 +123,10 @@ fn annealing(
                         break;
                     }
                     let (com_i, next) = moveable[rng.gen_range(0, moveable.len())];
-                    let prev = new_computers[com_i].posi;
-                    if !new_computers[com_i].go(input, next, &mut new_grid) {
-                        unreachable!();
-                    }
+                    let prev = new_computers.get_unchecked(com_i).posi;
+                    new_computers
+                        .get_unchecked_mut(com_i)
+                        .go(input, next, &mut new_grid);
                     new.push((com_i, next));
                     // moveableを変化させる
                     let mut new_moveable = vec![];
@@ -139,7 +138,7 @@ fn annealing(
                         if input.n <= ni || input.n <= nj || (ni, nj) == prev {
                             continue;
                         }
-                        if new_grid[ni][nj].is_empty() {
+                        if new_grid.get_unchecked(ni).get_unchecked(nj).is_empty() {
                             new_moveable.push((com_i, (ni, nj)));
                         }
                     }
@@ -151,7 +150,9 @@ fn annealing(
                             continue;
                         }
                         // prevのところが空きマスになるので、(ni, nj)にComputerがあればmoveableになる
-                        if let Cell::Computer { index } = new_grid[ni][nj] {
+                        if let Cell::Computer { index } =
+                            *new_grid.get_unchecked(ni).get_unchecked(nj)
+                        {
                             new_moveable.push((index, prev));
                         }
                     }
@@ -165,7 +166,10 @@ fn annealing(
                     moveable = new_moveable;
                 }
                 for &(com_i, next) in new_moves.iter().skip(insert_i) {
-                    if new_computers[com_i].go(input, next, &mut new_grid) {
+                    if new_computers
+                        .get_unchecked_mut(com_i)
+                        .go(input, next, &mut new_grid)
+                    {
                         new.push((com_i, next));
                     }
                 }
@@ -203,16 +207,16 @@ fn annealing(
                     if input.n <= ni || input.n <= nj {
                         break;
                     }
-                    if new_grid[ni][nj].is_empty() {
+                    if new_grid.get_unchecked(ni).get_unchecked(nj).is_empty() {
                         continue;
                     }
-                    if let Cell::Cable { kind: _ } = new_grid[ni][nj] {
+                    if let Cell::Cable { kind: _ } = *new_grid.get_unchecked(ni).get_unchecked(nj) {
                         break;
                     }
                     if uf.same(i * input.n + j, ni * input.n + nj) {
                         break;
                     }
-                    let id2 = new_grid[ni][nj].index();
+                    let id2 = new_grid.get_unchecked(ni).get_unchecked(nj).index();
                     let next_computer = &new_computers[id2];
                     if computer.kind == next_computer.kind {
                         new_connects.push((i, j, ni, nj));
@@ -220,7 +224,7 @@ fn annealing(
                         for _ in 0..len - 1 {
                             ni -= di;
                             nj -= dj;
-                            new_grid[ni][nj] = Cell::Cable {
+                            *new_grid.get_unchecked_mut(ni).get_unchecked_mut(nj) = Cell::Cable {
                                 kind: computer.kind,
                             };
                         }
@@ -262,16 +266,16 @@ fn annealing(
         let grid = start_grid;
         let computers = start_computers;
         for (com_i, next) in best_moves {
-            let pos = computers[com_i].posi;
+            let pos = computers.get_unchecked(com_i).posi;
             mv.push((pos.0, pos.1, next.0, next.1));
-            computers[com_i].go(input, next, grid);
+            computers.get_unchecked_mut(com_i).go(input, next, grid);
         }
         mv
     };
     (moves, best_connects)
 }
 
-fn compute_score(input: &Input, computers: &[Computer], uf: &mut UnionFind) -> i64 {
+unsafe fn compute_score(input: &Input, computers: &[Computer], uf: &mut UnionFind) -> i64 {
     let mut score = 0;
     for (i, computer1) in computers.iter().enumerate() {
         for computer2 in computers.iter().skip(i + 1) {
@@ -288,21 +292,6 @@ fn compute_score(input: &Input, computers: &[Computer], uf: &mut UnionFind) -> i
         }
     }
     score
-}
-
-#[allow(dead_code)]
-fn dist(p1: (usize, usize), p2: (usize, usize)) -> usize {
-    let dx = if p1.0 > p2.0 {
-        p1.0 - p2.0
-    } else {
-        p2.0 - p1.0
-    };
-    let dy = if p1.1 > p2.1 {
-        p1.1 - p2.1
-    } else {
-        p2.1 - p1.1
-    };
-    dx * dx + dy * dy
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -330,12 +319,11 @@ impl Cell {
 struct Computer {
     posi: (usize, usize),
     kind: usize,
-    connect: Vec<(usize, usize)>, // (direction, computer_index)
 }
 
 impl Computer {
-    fn go(&mut self, input: &Input, next: (usize, usize), grid: &mut [Vec<Cell>]) -> bool {
-        if !grid[next.0][next.1].is_empty() {
+    unsafe fn go(&mut self, input: &Input, next: (usize, usize), grid: &mut [Vec<Cell>]) -> bool {
+        if !grid.get_unchecked(next.0).get_unchecked(next.1).is_empty() {
             return false;
         }
         if DIJ.iter().all(|&(di, dj)| {
@@ -345,8 +333,11 @@ impl Computer {
         }) {
             return false;
         }
-        grid[next.0][next.1] = grid[self.posi.0][self.posi.1];
-        grid[self.posi.0][self.posi.1] = Cell::Empty;
+        *grid.get_unchecked_mut(next.0).get_unchecked_mut(next.1) =
+            *grid.get_unchecked(self.posi.0).get_unchecked(self.posi.1);
+        *grid
+            .get_unchecked_mut(self.posi.0)
+            .get_unchecked_mut(self.posi.1) = Cell::Empty;
         self.posi = next;
         true
     }
@@ -392,28 +383,28 @@ impl UnionFind {
         }
     }
 
-    fn find(&mut self, x: usize) -> usize {
-        if self.par[x] == x {
+    unsafe fn find(&mut self, x: usize) -> usize {
+        if *self.par.get_unchecked(x) == x {
             x
         } else {
-            self.par[x] = self.find(self.par[x]);
-            self.par[x]
+            *self.par.get_unchecked_mut(x) = self.find(*self.par.get_unchecked(x));
+            *self.par.get_unchecked_mut(x)
         }
     }
 
-    fn unite(&mut self, x: usize, y: usize) {
+    unsafe fn unite(&mut self, x: usize, y: usize) {
         let mut x = self.find(x);
         let mut y = self.find(y);
-        if self.size[x] < self.size[y] {
+        if *self.size.get_unchecked(x) < *self.size.get_unchecked(y) {
             std::mem::swap(&mut x, &mut y);
         }
         if x != y {
-            self.size[x] += self.size[y];
-            self.par[y] = x;
+            *self.size.get_unchecked_mut(x) += *self.size.get_unchecked(y);
+            *self.par.get_unchecked_mut(y) = x;
         }
     }
 
-    fn same(&mut self, x: usize, y: usize) -> bool {
+    unsafe fn same(&mut self, x: usize, y: usize) -> bool {
         self.find(x) == self.find(y)
     }
 }
