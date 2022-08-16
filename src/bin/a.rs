@@ -1,3 +1,4 @@
+use proconio::fastout;
 use rand::prelude::*;
 
 const TIMELIMIT: f64 = 2.775;
@@ -5,10 +6,11 @@ const DIJ: [(usize, usize); 4] = [(0, !0), (!0, 0), (0, 1), (1, 0)];
 // const DIR: [char; 4] = ['L', 'U', 'R', 'D'];
 type Output = Vec<(usize, usize, usize, usize)>;
 
+#[fastout]
 fn main() {
     let timer = Timer::new();
     let input = Input::new();
-    let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(356296);
+    let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(404444);
     let (mut grid, mut computers) = {
         let mut g = vec![vec![Cell::Empty; input.n]; input.n];
         let mut cs = vec![];
@@ -48,7 +50,7 @@ unsafe fn annealing(
     start_grid: &mut [Vec<Cell>],
     start_computers: &mut [Computer],
 ) -> (Output, Output) {
-    const T0: f64 = 20.5;
+    const T0: f64 = 20.75;
     const T1: f64 = 1.00;
     let mut temp = T0;
     let mut prob;
@@ -61,10 +63,8 @@ unsafe fn annealing(
     let mut best_moves = vec![];
     let mut best_connects = vec![];
     // movesの順にcomputerを動かす
-    // どの向きに動かすかは探索する（今はランダム）
+    // どの向きに動かすかは探索…しなかった（今はランダム）
     let mut count = 0;
-    // let mut neigh0 = 0;
-    // let mut neigh1 = 0;
     'lp: loop {
         if count >= 100 {
             let passed = timer.get_time() / TIMELIMIT;
@@ -112,7 +112,7 @@ unsafe fn annealing(
                         match *new_grid.get_unchecked(ni).get_unchecked(nj) {
                             Cell::Empty => moveable.push((i, (ni, nj))),
                             Cell::Computer { index: _ } => {}
-                            Cell::Cable { kind: _ } => {
+                            Cell::Cable => {
                                 unreachable!();
                             }
                         }
@@ -122,7 +122,7 @@ unsafe fn annealing(
                     if moveable.is_empty() {
                         break;
                     }
-                    let (com_i, next) = moveable[rng.gen_range(0, moveable.len())];
+                    let (com_i, next) = *moveable.get_unchecked(rng.gen_range(0, moveable.len()));
                     let prev = new_computers.get_unchecked(com_i).posi;
                     new_computers
                         .get_unchecked_mut(com_i)
@@ -185,7 +185,10 @@ unsafe fn annealing(
                     new_moves.remove(i);
                 }
                 for &(com_i, next) in new_moves.iter() {
-                    if !new_computers[com_i].go(input, next, &mut new_grid) {
+                    if !new_computers
+                        .get_unchecked_mut(com_i)
+                        .go(input, next, &mut new_grid)
+                    {
                         continue 'lp;
                     }
                 }
@@ -210,23 +213,21 @@ unsafe fn annealing(
                     if new_grid.get_unchecked(ni).get_unchecked(nj).is_empty() {
                         continue;
                     }
-                    if let Cell::Cable { kind: _ } = *new_grid.get_unchecked(ni).get_unchecked(nj) {
+                    if new_grid.get_unchecked(ni).get_unchecked(nj).is_cable() {
                         break;
                     }
                     if uf.same(i * input.n + j, ni * input.n + nj) {
                         break;
                     }
                     let id2 = new_grid.get_unchecked(ni).get_unchecked(nj).index();
-                    let next_computer = &new_computers[id2];
+                    let next_computer = new_computers.get_unchecked(id2);
                     if computer.kind == next_computer.kind {
                         new_connects.push((i, j, ni, nj));
                         uf.unite(i * input.n + j, ni * input.n + nj);
                         for _ in 0..len - 1 {
                             ni -= di;
                             nj -= dj;
-                            *new_grid.get_unchecked_mut(ni).get_unchecked_mut(nj) = Cell::Cable {
-                                kind: computer.kind,
-                            };
+                            *new_grid.get_unchecked_mut(ni).get_unchecked_mut(nj) = Cell::Cable;
                         }
                     }
                     if 100 * input.k <= new_moves.len() + new_connects.len() {
@@ -247,20 +248,12 @@ unsafe fn annealing(
         }
 
         if best_score < score {
-            // if neigh == 0 {
-            //     neigh0 += 1;
-            // }
-            // if neigh == 1 {
-            //     neigh1 += 1;
-            // }
             best_score = score;
             best_moves = moves.clone();
             best_connects = connects.clone();
         }
     }
-    // eprintln!("insert: {} remove: {}", neigh0, neigh1);
-    // eprintln!("count: {}", count);
-    eprintln!("best_score: {}", best_score);
+    // eprintln!("best_score: {}", best_score);
     let moves = {
         let mut mv = vec![];
         let grid = start_grid;
@@ -298,12 +291,16 @@ unsafe fn compute_score(input: &Input, computers: &[Computer], uf: &mut UnionFin
 enum Cell {
     Empty,
     Computer { index: usize },
-    Cable { kind: usize },
+    Cable,
 }
 
 impl Cell {
     fn is_empty(&self) -> bool {
         matches!(*self, Cell::Empty)
+    }
+
+    fn is_cable(&self) -> bool {
+        matches!(*self, Cell::Cable)
     }
 
     fn index(&self) -> usize {
